@@ -54,5 +54,11 @@ key.properties
 *.keystore-jks
 /.logs/
 /android/app/key.properties
+local.properties
+.env
+.env.*
+/secrets/
+*.p12
+*.pem
 coverage/
 !.github/workflows/*.yml
