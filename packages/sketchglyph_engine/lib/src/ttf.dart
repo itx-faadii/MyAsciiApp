@@ -58,6 +58,9 @@ class TtfFont {
 
   /// Parses a TrueType font. Throws [FormatException] for CFF or TTC inputs.
   static TtfFont parse(Uint8List data, {String fallbackName = ''}) {
+    if (data.length < 4) {
+      throw const FormatException('Font file is too small to be a SFNT font');
+    }
     final _Reader r = _Reader(data);
     final int version = r.u32();
     if (version == 0x74746366) {
@@ -70,6 +73,11 @@ class TtfFont {
     }
     if (version == 0x4F54544F) {
       throw const FormatException('OpenType CFF outlines are not supported');
+    }
+    if (data.length < 12) {
+      throw const FormatException(
+        'Font file is truncated before the table directory',
+      );
     }
 
     final int numTables = r.u16();
@@ -383,7 +391,7 @@ String _readFamilyName(Uint8List data, (int offset, int length) table) {
     r.skip(4); // encodingID, languageID
     final int nameId = r.u16();
     final int length = r.u16();
-    final int offset = r.u32();
+    final int offset = r.u16(); // name records use 16-bit offsets
     if (platform != 3 && platform != 0) continue;
     final (int, int) record = (storage + offset, length);
     if (nameId == 1 && nameId1 == null) nameId1 = record;

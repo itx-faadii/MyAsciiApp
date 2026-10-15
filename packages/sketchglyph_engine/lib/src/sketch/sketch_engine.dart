@@ -513,48 +513,154 @@ class _SketchContext {
     return (exp2x - 1) / (exp2x + 1);
   }
 
+  // Binodal (pi-periodic) orientation field stored as double angles in
+  // [-pi, pi), sampled by _getOrientation via shortest-arc bilinear
+  // interpolation.
+  static const int _orientationCell = 16;
+
   List<double> _estimateOrientation(GrayImage src) {
-    // Structure tensor for local orientation.
-    final int cellSize = 16;
-    final int cols = (src.width / cellSize).ceil();
-    final int rows = (src.height / cellSize).ceil();
+    // Structure tensor for local orientation. The gradient products are
+    // Gaussian-smoothed before cell aggregation so neighboring cells share
+    // overlapping support; hard box sums made hatch direction jump in
+    // visible 16px blocks.
+    final int w = src.width;
+    final int h = src.height;
+    final List<double> jxx = List<double>.filled(w * h, 0);
+    final List<double> jxy = List<double>.filled(w * h, 0);
+    final List<double> jyy = List<double>.filled(w * h, 0);
+
+    for (int y = 0; y < h; y++) {
+      for (int x = 0; x < w; x++) {
+        final double gx = (src.at(x + 1, y) - src.at(x - 1, y)).toDouble() / 2;
+        final double gy = (src.at(x, y + 1) - src.at(x, y - 1)).toDouble() / 2;
+        final int i = y * w + x;
+        jxx[i] = gx * gx;
+        jxy[i] = gx * gy;
+        jyy[i] = gy * gy;
+      }
+    }
+
+    _boxBlurPair(jxx, w, h);
+    _boxBlurPair(jxy, w, h);
+    _boxBlurPair(jyy, w, h);
+
+    final int cellSize = _orientationCell;
+    final int cols = (w / cellSize).ceil();
+    final int rows = (h / cellSize).ceil();
     final List<double> orientations = List<double>.filled(cols * rows, 0);
 
     for (int cy = 0; cy < rows; cy++) {
+      final int y0 = cy * cellSize;
+      final int y1 = math.min(y0 + cellSize, h);
       for (int cx = 0; cx < cols; cx++) {
         final int x0 = cx * cellSize;
-        final int y0 = cy * cellSize;
-        final int x1 = math.min(x0 + cellSize, src.width);
-        final int y1 = math.min(y0 + cellSize, src.height);
+        final int x1 = math.min(x0 + cellSize, w);
 
-        double jxx = 0, jxy = 0, jyy = 0;
+        double sxx = 0, sxy = 0, syy = 0;
         for (int y = y0; y < y1; y++) {
+          final int row = y * w;
           for (int x = x0; x < x1; x++) {
-            final double gx =
-                (src.at(x + 1, y) - src.at(x - 1, y)).toDouble() / 2;
-            final double gy =
-                (src.at(x, y + 1) - src.at(x, y - 1)).toDouble() / 2;
-            jxx += gx * gx;
-            jxy += gx * gy;
-            jyy += gy * gy;
+            final int i = row + x;
+            sxx += jxx[i];
+            sxy += jxy[i];
+            syy += jyy[i];
           }
         }
 
-        // Orientation is perpendicular to gradient.
-        final double angle = math.atan2(2 * jxy, jxx - jyy) / 2;
-        orientations[cy * cols + cx] = angle + math.pi / 2;
+        // Store the double angle so interpolation can blend across the
+        // pi-periodic seam via shortest arc. Hatch = angle/2 + pi/2.
+        orientations[cy * cols + cx] = math.atan2(2 * sxy, sxx - syy);
       }
     }
 
     return orientations;
   }
 
+  // Two-pass separable box blur (radius 8) along one axis then the other;
+  // applying it twice approximates a Gaussian for smoothing purposes.
+  void _boxBlurPair(List<double> values, int w, int h) {
+    _boxBlurH(values, w, h, 8);
+    _boxBlurH(values, w, h, 8);
+    _boxBlurV(values, w, h, 8);
+    _boxBlurV(values, w, h, 8);
+  }
+
+  void _boxBlurH(List<double> values, int w, int h, int radius) {
+    final List<double> out = List<double>.filled(values.length, 0);
+    for (int y = 0; y < h; y++) {
+      final int row = y * w;
+      for (int x = 0; x < w; x++) {
+        final int a = math.max(0, x - radius);
+        final int b = math.min(w - 1, x + radius);
+        double sum = 0;
+        for (int i = a; i <= b; i++) {
+          sum += values[row + i];
+        }
+        out[row + x] = sum / (b - a + 1);
+      }
+    }
+    values.setAll(0, out);
+  }
+
+  void _boxBlurV(List<double> values, int w, int h, int radius) {
+    final List<double> out = List<double>.filled(values.length, 0);
+    for (int y = 0; y < h; y++) {
+      final int a = math.max(0, y - radius);
+      final int b = math.min(h - 1, y + radius);
+      final double inv = 1 / (b - a + 1);
+      for (int x = 0; x < w; x++) {
+        double sum = 0;
+        for (int i = a; i <= b; i++) {
+          sum += values[i * w + x];
+        }
+        out[y * w + x] = sum * inv;
+      }
+    }
+    values.setAll(0, out);
+  }
+
   double _getOrientation(int x, int y) {
-    final int cellSize = 16;
+    final int cellSize = _orientationCell;
     final int cols = (workWidth / cellSize).ceil();
-    final int cx = (x ~/ cellSize).clamp(0, cols - 1);
-    final int cy = (y ~/ cellSize).clamp(0, (workHeight / cellSize).ceil() - 1);
-    return orientationField[cy * cols + cx];
+    final int rows = (workHeight / cellSize).ceil();
+
+    // Bilinear sample at cell centers; blend the shortest arc so a field
+    // value of ~0 and ~pi interpolates through ~pi/2, not through pi.
+    final double gx = (x + 0.5) / cellSize - 0.5;
+    final double gy = (y + 0.5) / cellSize - 0.5;
+    final int x0 = gx.floor().clamp(0, cols - 1);
+    final int y0 = gy.floor().clamp(0, rows - 1);
+    final int x1 = math.min(x0 + 1, cols - 1);
+    final int y1 = math.min(y0 + 1, rows - 1);
+    final double tx = (gx - x0).clamp(0.0, 1.0);
+    final double ty = (gy - y0).clamp(0.0, 1.0);
+
+    final double a00 = orientationField[y0 * cols + x0];
+    final double a10 = orientationField[y0 * cols + x1];
+    final double a01 = orientationField[y1 * cols + x0];
+    final double a11 = orientationField[y1 * cols + x1];
+
+    final double r0 = a00 + _shortestArc(a10 - a00) * tx;
+    double r1 = a01 + _shortestArc(a11 - a01) * tx;
+    double d = _shortestArc(r1 - r0);
+    if (d > math.pi) {
+      d -= 2 * math.pi;
+    } else if (d < -math.pi) {
+      d += 2 * math.pi;
+    }
+    r1 = r0 + d;
+    return (r0 + d * ty) / 2 + math.pi / 2;
+  }
+
+  double _shortestArc(double delta) {
+    double d = delta;
+    while (d > math.pi) {
+      d -= 2 * math.pi;
+    }
+    while (d < -math.pi) {
+      d += 2 * math.pi;
+    }
+    return d;
   }
 
   void _fillPaper(RgbImage output) {
@@ -1006,38 +1112,24 @@ class _SketchContext {
           final double offset = (i + 1) * spacing;
           final double cx0 = x0 + math.cos(angle + math.pi / 2) * offset;
           final double cy0 = y0 + math.sin(angle + math.pi / 2) * offset;
-          final double len = cellSize * 1.2;
-
-          final double w = noise.fbm(cx0 * 0.05, cy0 * 0.05) * wobble;
           final double flowUneven = uneven
               ? 0.5 + rng.nextDouble() * settings.inkFlow
               : 1.0;
 
-          final double x1p = cx0 + math.cos(angle + w) * len;
-          final double y1p = cy0 + math.sin(angle + w) * len;
-
-          final double localAlpha = alpha * tone * flowUneven;
-          _drawLineSegment(
+          // Trace through the orientation field so lines flow across cell
+          // boundaries instead of stopping at the 16px grid.
+          _traceHatchLine(
             output,
-            cx0,
-            cy0,
-            x1p,
-            y1p,
+            cx0 + rng.nextDouble() * 2 - 1,
+            cy0 + rng.nextDouble() * 2 - 1,
+            cellSize * 2.0,
             width,
-            localAlpha,
-            inkR: inkR,
-            inkG: inkG,
-            inkB: inkB,
-          );
-
-          strokes.add(
-            SketchStroke(
-              points: <double>[cx0, cy0, x1p, y1p],
-              width: width,
-              alpha: localAlpha,
-              colorArgb: (0xFF << 24) | (inkR << 16) | (inkG << 8) | inkB,
-              kind: StrokeKind.line,
-            ),
+            alpha * tone * flowUneven * 0.95,
+            inkR,
+            inkG,
+            inkB,
+            wobble: wobble,
+            seedTone: tone,
           );
 
           if (strokes.length > 60000) return;
@@ -1053,34 +1145,20 @@ class _SketchContext {
             final double offset = (i + 1) * crossSpacing;
             final double cx0 = x0 + math.cos(crossAngle + math.pi / 2) * offset;
             final double cy0 = y0 + math.sin(crossAngle + math.pi / 2) * offset;
-            final double len = cellSize * 1.2;
 
-            final double w = noise.fbm(cx0 * 0.05, cy0 * 0.05) * wobble;
-            final double x1p = cx0 + math.cos(crossAngle + w) * len;
-            final double y1p = cy0 + math.sin(crossAngle + w) * len;
-
-            final double localAlpha = alpha * tone * 0.7;
-            _drawLineSegment(
+            _traceHatchLine(
               output,
-              cx0,
-              cy0,
-              x1p,
-              y1p,
+              cx0 + rng.nextDouble() * 2 - 1,
+              cy0 + rng.nextDouble() * 2 - 1,
+              cellSize * 2.0,
               width,
-              localAlpha,
-              inkR: inkR,
-              inkG: inkG,
-              inkB: inkB,
-            );
-
-            strokes.add(
-              SketchStroke(
-                points: <double>[cx0, cy0, x1p, y1p],
-                width: width,
-                alpha: localAlpha,
-                colorArgb: (0xFF << 24) | (inkR << 16) | (inkG << 8) | inkB,
-                kind: StrokeKind.line,
-              ),
+              alpha * tone * 0.7 * 0.95,
+              inkR,
+              inkG,
+              inkB,
+              wobble: wobble,
+              directionOffset: math.pi / 4,
+              seedTone: tone,
             );
 
             if (strokes.length > 60000) return;
@@ -1088,6 +1166,103 @@ class _SketchContext {
         }
       }
     }
+  }
+
+  // Draw a hatch line by walking the orientation field; alpha follows the
+  // local tone so strokes fade out before spilling into highlights.
+  void _traceHatchLine(
+    RgbImage output,
+    double sx,
+    double sy,
+    double len,
+    double width,
+    double baseAlpha,
+    int inkR,
+    int inkG,
+    int inkB, {
+    double wobble = 0.3,
+    double directionOffset = 0,
+    required double seedTone,
+  }) {
+    const double step = 2.0;
+    // Vary the length and slide the start backwards along the flow so
+    // neighbouring cells overlap and stroke ends never line up into a
+    // visible grid seam.
+    final double actualLen = len * (0.7 + rng.nextDouble() * 0.8);
+    final int n = (actualLen / step).round();
+    final int back = (n * (0.15 + rng.nextDouble() * 0.5)).round();
+
+    double px = sx;
+    double py = sy;
+    for (int i = 0; i < back; i++) {
+      final double dir =
+          _getOrientation(px.round(), py.round()) + directionOffset + math.pi;
+      final double nx = px + math.cos(dir) * step;
+      final double ny = py + math.sin(dir) * step;
+      if (nx < 0 || nx >= workWidth || ny < 0 || ny >= workHeight) break;
+      px = nx;
+      py = ny;
+    }
+
+    final List<double> points = <double>[px, py];
+    for (int i = 0; i < n; i++) {
+      final double t = _toneAt(px, py);
+      if (t < 0.06) break;
+      final double dir =
+          _getOrientation(px.round(), py.round()) +
+          directionOffset +
+          noise.fbm(px * 0.05, py * 0.05) * wobble;
+      final double nx = px + math.cos(dir) * step;
+      final double ny = py + math.sin(dir) * step;
+      if (nx < 0 || nx >= workWidth || ny < 0 || ny >= workHeight) break;
+
+      final double progress = i / math.max(n - 1, 1);
+      final double taper = math.sin(progress * math.pi) * 0.7 + 0.3;
+      _drawLineSegment(
+        output,
+        px,
+        py,
+        nx,
+        ny,
+        width,
+        baseAlpha * taper * (t / math.max(seedTone, 0.001)).clamp(0.0, 1.0),
+        inkR: inkR,
+        inkG: inkG,
+        inkB: inkB,
+      );
+      points.add(nx);
+      points.add(ny);
+      px = nx;
+      py = ny;
+    }
+
+    if (points.length < 4) return;
+    strokes.add(
+      SketchStroke(
+        points: points,
+        width: width,
+        alpha: baseAlpha,
+        colorArgb: (0xFF << 24) | (inkR << 16) | (inkG << 8) | inkB,
+        kind: StrokeKind.line,
+      ),
+    );
+  }
+
+  double _toneAt(double x, double y) {
+    final double fx = x.clamp(0, workWidth - 1.0);
+    final double fy = y.clamp(0, workHeight - 1.0);
+    final int x0 = fx.floor();
+    final int y0 = fy.floor();
+    final int x1 = math.min(x0 + 1, workWidth - 1);
+    final int y1 = math.min(y0 + 1, workHeight - 1);
+    final double tx = fx - x0;
+    final double ty = fy - y0;
+    final double a = gray.at(x0, y0).toDouble();
+    final double b = gray.at(x1, y0).toDouble();
+    final double c = gray.at(x0, y1).toDouble();
+    final double d = gray.at(x1, y1).toDouble();
+    final double v = (a + (b - a) * tx) * (1 - ty) + (c + (d - c) * tx) * ty;
+    return (255 - v) / 255;
   }
 
   void _hatchForToneColored(
@@ -1143,34 +1318,19 @@ class _SketchContext {
           final double offset = (i + 1) * spacing;
           final double cx0 = x0 + math.cos(angle + math.pi / 2) * offset;
           final double cy0 = y0 + math.sin(angle + math.pi / 2) * offset;
-          final double len = cellSize * 1.2;
 
-          final double w = noise.fbm(cx0 * 0.05, cy0 * 0.05) * 0.3;
-          final double x1p = cx0 + math.cos(angle + w) * len;
-          final double y1p = cy0 + math.sin(angle + w) * len;
-
-          final double localAlpha = alpha * tone;
-          _drawLineSegment(
+          _traceHatchLine(
             output,
-            cx0,
-            cy0,
-            x1p,
-            y1p,
+            cx0 + rng.nextDouble() * 2 - 1,
+            cy0 + rng.nextDouble() * 2 - 1,
+            cellSize * 2.0,
             width,
-            localAlpha,
-            inkR: srcR,
-            inkG: srcG,
-            inkB: srcB,
-          );
-
-          strokes.add(
-            SketchStroke(
-              points: <double>[cx0, cy0, x1p, y1p],
-              width: width,
-              alpha: localAlpha,
-              colorArgb: (0xFF << 24) | (srcR << 16) | (srcG << 8) | srcB,
-              kind: StrokeKind.line,
-            ),
+            alpha * tone * 0.95,
+            srcR,
+            srcG,
+            srcB,
+            wobble: 0.3,
+            seedTone: tone,
           );
 
           if (strokes.length > 60000) return;
@@ -1185,34 +1345,20 @@ class _SketchContext {
             final double offset = (i + 1) * crossSpacing;
             final double cx0 = x0 + math.cos(crossAngle + math.pi / 2) * offset;
             final double cy0 = y0 + math.sin(crossAngle + math.pi / 2) * offset;
-            final double len = cellSize * 1.2;
 
-            final double w = noise.fbm(cx0 * 0.05, cy0 * 0.05) * 0.3;
-            final double x1p = cx0 + math.cos(crossAngle + w) * len;
-            final double y1p = cy0 + math.sin(crossAngle + w) * len;
-
-            final double localAlpha = alpha * tone * 0.7;
-            _drawLineSegment(
+            _traceHatchLine(
               output,
-              cx0,
-              cy0,
-              x1p,
-              y1p,
+              cx0 + rng.nextDouble() * 2 - 1,
+              cy0 + rng.nextDouble() * 2 - 1,
+              cellSize * 2.0,
               width,
-              localAlpha,
-              inkR: srcR,
-              inkG: srcG,
-              inkB: srcB,
-            );
-
-            strokes.add(
-              SketchStroke(
-                points: <double>[cx0, cy0, x1p, y1p],
-                width: width,
-                alpha: localAlpha,
-                colorArgb: (0xFF << 24) | (srcR << 16) | (srcG << 8) | srcB,
-                kind: StrokeKind.line,
-              ),
+              alpha * tone * 0.7 * 0.95,
+              srcR,
+              srcG,
+              srcB,
+              wobble: 0.3,
+              directionOffset: math.pi / 4,
+              seedTone: tone,
             );
 
             if (strokes.length > 60000) return;

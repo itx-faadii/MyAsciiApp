@@ -163,7 +163,7 @@ GrayImage gaussianBlur(GrayImage src, double sigma) {
 /// Downscale so the long edge is at most [maxEdge]; keeps aspect ratio.
 GrayImage downscaleGray(GrayImage src, int maxEdge) {
   final int longEdge = math.max(src.width, src.height);
-  if (longEdge <= maxEdge || longEdge == 0) return src.clone();
+  if (maxEdge <= 0 || longEdge <= maxEdge || longEdge == 0) return src.clone();
   final double factor = maxEdge / longEdge;
   final int w = math.max(1, (src.width * factor).round());
   final int h = math.max(1, (src.height * factor).round());
