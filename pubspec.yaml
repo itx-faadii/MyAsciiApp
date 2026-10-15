@@ -1,0 +1,67 @@
+name: sketchglyph
+description: >-
+  SketchGlyph - turn photos into ASCII art and hand-drawn sketches, entirely
+  offline on your device.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # Pure-Dart ASCII + sketch engines (monorepo package).
+  sketchglyph_engine:
+    path: packages/sketchglyph_engine
+
+  # State + navigation.
+  flutter_riverpod: ^3.0.2
+  go_router: ^16.3.0
+
+  # UI.
+  cupertino_icons: ^1.0.8
+
+  # Input / output.
+  image: ^4.3.0
+  image_picker: ^1.2.0
+  file_picker: ^10.3.10
+  share_plus: ^12.0.1
+  path_provider: ^2.1.5
+
+  # Persistence (local only).
+  shared_preferences: ^2.5.3
+
+  # Localisation + formatting.
+  intl: any
+  lucide_icons_flutter: ^3.1.25
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  mocktail: ^1.0.4
+
+flutter:
+  uses-material-design: true
+  generate: true
+
+  assets:
+    - assets/font_metrics.json
+
+  fonts:
+    - family: JetBrains Mono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
+    - family: IBM Plex Mono
+      fonts:
+        - asset: assets/fonts/IBM Plex Mono.ttf
+    - family: Courier Prime
+      fonts:
+        - asset: assets/fonts/Courier Prime.ttf
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter.ttf
