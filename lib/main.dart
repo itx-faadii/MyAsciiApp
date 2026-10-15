@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gleap_sdk/gleap_sdk.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -13,6 +14,9 @@ import 'core/settings/settings_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // United States (New York): select the Gleap data region before initializing.
+  await Gleap.setRegion(region: 'us');
+  await Gleap.initialize(token: 'UUxv7YMC5iuSYKmRtEiGmTF3cPfUQWQx');
   // Resolve preferences BEFORE the first frame so the persisted theme is
   // applied immediately (no white flash on cold start).
   final SharedPreferences prefs = await SharedPreferences.getInstance();
