@@ -35,6 +35,9 @@ dependencies:
   # Persistence (local only).
   shared_preferences: ^2.5.3
 
+  # In-app support widget (chat, bug reporting, surveys).
+  gleap_sdk: ^19.2.4
+
   # Localisation + formatting.
   intl: any
   lucide_icons_flutter: ^3.1.25
