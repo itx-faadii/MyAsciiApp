@@ -1,4 +1,4 @@
-package com.sketchglyph.sketchglyph
+package com.sketchglyph.app
 
 import io.flutter.embedding.android.FlutterActivity
 
