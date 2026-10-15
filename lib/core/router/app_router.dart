@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/ascii/presentation/ascii_editor_screen.dart';
 import '../../features/create/presentation/create_screen.dart';
 import '../../features/gallery/presentation/gallery_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
@@ -32,6 +33,9 @@ class AppRoutes {
 
   /// First-run onboarding.
   static const String onboarding = '/onboarding';
+
+  /// ASCII editor.
+  static const String asciiEditor = '/create/ascii';
 }
 
 final GlobalKey<NavigatorState> _rootKey = GlobalKey<NavigatorState>(
@@ -66,6 +70,14 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
             NoTransitionPage<void>(
               key: state.pageKey,
               child: const OnboardingScreen(),
+            ),
+      ),
+      GoRoute(
+        path: AppRoutes.asciiEditor,
+        pageBuilder: (BuildContext context, GoRouterState state) =>
+            NoTransitionPage<void>(
+              key: state.pageKey,
+              child: const AsciiEditorScreen(),
             ),
       ),
       StatefulShellRoute.indexedStack(
