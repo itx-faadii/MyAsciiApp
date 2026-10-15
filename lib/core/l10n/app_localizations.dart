@@ -184,6 +184,42 @@ abstract class AppLocalizations {
   /// **'Choose an image'**
   String get createPickSource;
 
+  /// No description provided for @createPickFromGallery.
+  ///
+  /// In en, this message translates to:
+  /// **'Gallery'**
+  String get createPickFromGallery;
+
+  /// No description provided for @createPickFromCamera.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera'**
+  String get createPickFromCamera;
+
+  /// No description provided for @createPickFromFile.
+  ///
+  /// In en, this message translates to:
+  /// **'File'**
+  String get createPickFromFile;
+
+  /// No description provided for @createBatchMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch Mode'**
+  String get createBatchMode;
+
+  /// No description provided for @actionRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get actionRetry;
+
+  /// No description provided for @createAccessBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Access was blocked. You can allow it in system settings and try again.'**
+  String get createAccessBlocked;
+
   /// No description provided for @galleryTitle.
   ///
   /// In en, this message translates to:

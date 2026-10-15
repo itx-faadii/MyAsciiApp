@@ -57,6 +57,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createPickSource => 'Choose an image';
 
   @override
+  String get createPickFromGallery => 'Gallery';
+
+  @override
+  String get createPickFromCamera => 'Camera';
+
+  @override
+  String get createPickFromFile => 'File';
+
+  @override
+  String get createBatchMode => 'Batch Mode';
+
+  @override
+  String get actionRetry => 'Retry';
+
+  @override
+  String get createAccessBlocked =>
+      'Access was blocked. You can allow it in system settings and try again.';
+
+  @override
   String get galleryTitle => 'Gallery';
 
   @override

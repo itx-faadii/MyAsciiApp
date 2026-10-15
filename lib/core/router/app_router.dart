@@ -6,11 +6,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/ascii/presentation/ascii_editor_screen.dart';
+import '../../features/create/data/default_editor_launcher.dart';
+import '../../features/create/data/source_picker.dart';
+import '../../features/create/domain/editor_launcher.dart';
+import '../../features/create/presentation/batch_screen.dart';
 import '../../features/create/presentation/create_screen.dart';
+import '../../features/create/presentation/transform_screen.dart';
+import '../../features/create/presentation/type_screen.dart';
 import '../../features/gallery/presentation/gallery_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
+import '../../features/sketch/presentation/sketch_editor_screen.dart';
 import '../providers/settings_providers.dart';
 import '../../shared/widgets/app_shell.dart';
 import '../settings/app_settings.dart';
@@ -25,6 +32,15 @@ class AppRoutes {
   /// Create tab.
   static const String create = '/create';
 
+  /// Create transform step.
+  static const String createTransform = '/create/transform';
+
+  /// Create type step.
+  static const String createType = '/create/type';
+
+  /// Create batch mode.
+  static const String createBatch = '/create/batch';
+
   /// Gallery tab.
   static const String gallery = '/gallery';
 
@@ -36,10 +52,18 @@ class AppRoutes {
 
   /// ASCII editor.
   static const String asciiEditor = '/create/ascii';
+
+  /// Sketch editor.
+  static const String sketchEditor = '/create/sketch';
 }
 
 final GlobalKey<NavigatorState> _rootKey = GlobalKey<NavigatorState>(
   debugLabel: 'root',
+);
+
+/// Shared source picker (image_picker + file_picker backed).
+final Provider<SourcePicker> sourcePickerProvider = Provider<SourcePicker>(
+  (Ref ref) => PluginSourcePicker(),
 );
 
 /// The app router. Rebuilt only when the Provider container changes; the
@@ -50,7 +74,13 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
   ref.listen(settingsControllerProvider, (_, AppSettings next) {
     refresh.update(next.onboardingSeen);
   });
-  return GoRouter(
+  late final GoRouter router;
+  final SourcePicker picker = ref.read(sourcePickerProvider);
+  final EditorLauncher launcher = DefaultEditorLauncher(
+    onNavigateAscii: () => router.push(AppRoutes.asciiEditor),
+    onNavigateSketch: () => router.push(AppRoutes.sketchEditor),
+  );
+  router = GoRouter(
     navigatorKey: _rootKey,
     initialLocation: AppRoutes.home,
     refreshListenable: refresh,
@@ -80,6 +110,14 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
               child: const AsciiEditorScreen(),
             ),
       ),
+      GoRoute(
+        path: AppRoutes.sketchEditor,
+        pageBuilder: (BuildContext context, GoRouterState state) =>
+            NoTransitionPage<void>(
+              key: state.pageKey,
+              child: const SketchEditorScreen(),
+            ),
+      ),
       StatefulShellRoute.indexedStack(
         builder: (
           BuildContext context,
@@ -101,7 +139,24 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
               GoRoute(
                 path: AppRoutes.create,
                 builder: (BuildContext context, GoRouterState state) =>
-                    const CreateScreen(),
+                    CreateScreen(picker: picker, launcher: launcher),
+                routes: <RouteBase>[
+                  GoRoute(
+                    path: 'transform',
+                    builder: (BuildContext context, GoRouterState state) =>
+                        const TransformScreen(),
+                  ),
+                  GoRoute(
+                    path: 'type',
+                    builder: (BuildContext context, GoRouterState state) =>
+                        TypeScreen(launcher: launcher),
+                  ),
+                  GoRoute(
+                    path: 'batch',
+                    builder: (BuildContext context, GoRouterState state) =>
+                        BatchScreen(picker: picker),
+                  ),
+                ],
               ),
             ],
           ),
@@ -127,6 +182,7 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
       ),
     ],
   );
+  return router;
 });
 
 class _SettingsRefresh extends ChangeNotifier {
