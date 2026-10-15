@@ -1,0 +1,16 @@
+name: sketchglyph_engine
+description: >-
+  Pure-Dart image processing engines for SketchGlyph: the ASCII art renderer
+  and the realistic sketch renderer. No Flutter imports, fully deterministic.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.13.5
+
+dependencies:
+  image: ^4.3.0
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.25.0
